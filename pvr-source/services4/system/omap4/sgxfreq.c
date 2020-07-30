@@ -318,15 +318,12 @@ int sgxfreq_init(struct device *dev)
 		return -EINVAL;
 
 	sfd.pdata = (struct gpu_platform_data *)dev->platform_data;
-	if (!sfd.pdata ||
-	    !sfd.pdata->opp_get_opp_count ||
-	    !sfd.pdata->opp_find_freq_ceil ||
-	    !sfd.pdata->device_scale)
+	if (!sfd.pdata || !sfd.pdata->device_scale)
 		return -EINVAL;
 
 	rcu_read_lock();
 
-	sfd.freq_cnt = sfd.pdata->opp_get_opp_count(dev);
+	sfd.freq_cnt = opp_get_opp_count(dev);
 	if (sfd.freq_cnt < 1) {
 		rcu_read_unlock();
 		return -ENODEV;
@@ -340,7 +337,7 @@ int sgxfreq_init(struct device *dev)
 
 	freq = 0;
 	for (i = 0; i < sfd.freq_cnt; i++) {
-		opp = sfd.pdata->opp_find_freq_ceil(dev, &freq);
+		opp = opp_find_freq_ceil(dev, &freq);
 		if (IS_ERR_OR_NULL(opp)) {
 			rcu_read_unlock();
 			kfree(sfd.freq_list);
