@@ -197,7 +197,7 @@ typedef char				TCHAR, *PTCHAR, *PTSTR;
 */
 #if defined LINUX
 	/* Use C99 format specifier where possible */
-	#define SIZE_T_FMT_LEN "z"
+	#define SIZE_T_FMT_LEN ""
 #elif  defined _WIN64
 	#define SIZE_T_FMT_LEN "I"
 #else

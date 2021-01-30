@@ -336,7 +336,7 @@ AllocMemory (BM_CONTEXT			*pBMContext,
 							(IMG_PVOID *)&pMapping, IMG_NULL,
 							"Buffer Manager Mapping") != PVRSRV_OK)
 		{
-			PVR_DPF((PVR_DBG_ERROR, "AllocMemory: OSAllocMem(0x%" SIZE_T_FMT_LEN "x) FAILED", sizeof(*pMapping)));
+			PVR_DPF((PVR_DBG_ERROR, "AllocMemory: OSAllocMem(0x%lx) FAILED", sizeof(*pMapping)));
 			return IMG_FALSE;
 		}
 
@@ -451,7 +451,7 @@ WrapMemory (BM_HEAP *psBMHeap,
 						(IMG_PVOID *)&pMapping, IMG_NULL,
 						"Mocked-up mapping") != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "WrapMemory: OSAllocMem(0x%" SIZE_T_FMT_LEN "x) FAILED", sizeof(*pMapping)));
+		PVR_DPF((PVR_DBG_ERROR, "WrapMemory: OSAllocMem(0x%lx) FAILED", sizeof(*pMapping)));
 		return IMG_FALSE;
 	}
 

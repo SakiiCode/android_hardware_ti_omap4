@@ -91,6 +91,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include <linux/console.h>
 #include <linux/omapfb.h>
 #include <linux/mutex.h>
+#include <linux/platform_device.h>
 
 #if defined(PVR_OMAPLFB_DRM_FB)
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,0,0))
@@ -183,7 +184,7 @@ MODULE_SUPPORTED_DEVICE(DEVNAME);
 #else	/* defined(PVR_OMAPFB3_OMAP5_UEVM) */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34))
 #define OMAP_DSS_DRIVER(drv, dev) struct omap_dss_driver *drv = (dev) != NULL ? (dev)->driver : NULL
-#define OMAP_DSS_MANAGER(man, dev) struct omap_overlay_manager *man = (dev) != NULL ? (dev)->manager : NULL
+#define OMAP_DSS_MANAGER(man, dev) struct omap_overlay_manager *man = (dev) != NULL ? (dev)->output->manager : NULL
 #define	WAIT_FOR_VSYNC(man)	((man)->wait_for_vsync)
 #else	/* (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,34)) */
 #define OMAP_DSS_DRIVER(drv, dev) struct omap_dss_device *drv = (dev)

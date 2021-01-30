@@ -71,7 +71,7 @@ struct _BM_MAPPING_
 		hm_wrapped_virtaddr, /*!< wrapped user supplied contiguous with virtual address*/
 		hm_wrapped_scatter_virtaddr, /*!< wrapped user supplied scattered with virtual address*/
 		hm_env,				/*!< obtained from environment */
-		hm_contiguous		/*!< contiguous arena */
+		hm_contiguous		/*!< contigous arena */
 	} eCpuMemoryOrigin;
 
 	BM_HEAP				*pBMHeap;	/* which BM heap */
@@ -83,19 +83,25 @@ struct _BM_MAPPING_
 	IMG_SYS_PHYADDR		*psSysAddr;
 	IMG_SIZE_T			uSize;
 	IMG_SIZE_T			uSizeVM;
-	IMG_HANDLE			hOSMemHandle;
+    IMG_HANDLE          hOSMemHandle;
 	IMG_UINT32			ui32Flags;
-#if defined (PVRSRV_DEVMEM_TIME_STATS)
-	IMG_UINT32			ui32TimeToDevMap;	/* Time taken (in microseconds) to map this memory in device MMU */
-	IMG_UINT32			*pui32TimeToDevUnmap; /* Time taken (in microseconds) to unmap this memory from Device MMU.
-													NOTE - API user provided address to store this info, if at all  */
-#endif
 
 	/* Sparse mapping data */
 	IMG_UINT32			ui32ChunkSize;
 	IMG_UINT32			ui32NumVirtChunks;
 	IMG_UINT32			ui32NumPhysChunks;
 	IMG_BOOL			*pabMapChunk;
+
+	/* GPU mapping reference count
+	 * When goes down to 0 GPU mapping
+	 * gets removed */
+	IMG_UINT32			ui32MappingCount;
+
+	/* need to track the original required alignment to make sure
+	 * that an unmapped buffer which is later remapped to device
+	 * is remapped with the original alignment restrictions.
+	 */
+	IMG_UINT32			ui32DevVAddrAlignment;
 };
 
 /*
@@ -107,7 +113,7 @@ struct _BM_MAPPING_
 typedef struct _BM_BUF_
 {
 	IMG_CPU_VIRTADDR	*CpuVAddr;
-	IMG_VOID			*hOSMemHandle;
+    IMG_VOID            *hOSMemHandle;
 	IMG_CPU_PHYADDR		CpuPAddr;
 	IMG_DEV_VIRTADDR	DevVAddr;
 
@@ -183,8 +189,8 @@ typedef struct _XPROC_DATA_{
 	IMG_UINT32 ui32AllocFlags;
 	IMG_UINT32 ui32Size;
 	IMG_UINT32 ui32PageSize;
-	RA_ARENA *psArena;
-	IMG_SYS_PHYADDR sSysPAddr;
+    RA_ARENA *psArena;
+    IMG_SYS_PHYADDR sSysPAddr;
 	IMG_VOID *pvCpuVAddr;
 	IMG_HANDLE hOSMemHandle;
 } XPROC_DATA;
@@ -277,7 +283,7 @@ BM_DestroyHeap (IMG_HANDLE hDevMemHeap);
  *  @Description
  *
  *  Reinitialises the buffer manager after a power event. Calling this
- *  function will reprogram MMU registers and re-enable the MMU.
+ *  function will reprogram MMU registers and renable the MMU.
  *
  *  @Input None
  *  @Return None
@@ -295,7 +301,7 @@ BM_Reinitialise (PVRSRV_DEVICE_NODE *psDeviceNode);
  *  maps.
  *
  *  @Input uSize - require size in bytes of the buffer.
- *  @Input/Output pui32Flags - bit mask of buffer property flags + receives heap flags.
+ *  @Input/Output pui32Flags - bit mask of buffer property flags + recieves heap flags.
  *  @Input uDevVAddrAlignment - required alignment in bytes, or 0.
  *  @Input pvPrivData - private data passed to OS allocator
  *  @Input ui32PrivDataLength - length of private data
@@ -303,9 +309,6 @@ BM_Reinitialise (PVRSRV_DEVICE_NODE *psDeviceNode);
  *  @Input ui32NumVirtChunks - Number of virtual chunks
  *  @Input ui32NumPhysChunks - Number of physical chunks
  *  @Input pabMapChunk - Chunk mapping array
- *  @Output pui32TimeToDevMap - Available only when PVRSRV_DEVMEM_TIME_STATS defined,
- *                              contains time taken (in microseconds) to map this buffer
- *                              to Device MMU.
  *  @Output phBuf - receives the buffer handle.
  *  @Return IMG_TRUE - Success, IMG_FALSE - Failed.
  */
@@ -321,9 +324,6 @@ BM_Alloc (IMG_HANDLE			hDevMemHeap,
 			IMG_UINT32			ui32NumVirtChunks,
 			IMG_UINT32			ui32NumPhysChunks,
 			IMG_BOOL			*pabMapChunk,
-			#if defined (PVRSRV_DEVMEM_TIME_STATS)
-			IMG_UINT32			*pui32TimeToDevMap,
-			#endif
 			BM_HANDLE			*phBuf);
 
 /**
@@ -346,8 +346,8 @@ BM_Alloc (IMG_HANDLE			hDevMemHeap,
  */
 IMG_BOOL
 BM_Wrap (	IMG_HANDLE hDevMemHeap,
-			IMG_SIZE_T uSize,
-			IMG_SIZE_T uOffset,
+		    IMG_SIZE_T ui32Size,
+			IMG_SIZE_T ui32Offset,
 			IMG_BOOL bPhysContig,
 			IMG_SYS_PHYADDR *psSysAddr,
 			IMG_VOID *pvCPUVAddr,
@@ -362,17 +362,11 @@ BM_Wrap (	IMG_HANDLE hDevMemHeap,
  *  Free a buffer previously allocated via BM_Alloc.
  *
  *  @Input  hBuf - buffer handle.
- *  @Output pui32TimeToDevUnmap - Time taken in us to "unmap"
- *		the memory from Device MMU
  *  @Return None.
  */
 IMG_VOID
 BM_Free (BM_HANDLE hBuf,
-		IMG_UINT32 ui32Flags
-		#if defined(PVRSRV_DEVMEM_TIME_STATS)
-		, IMG_UINT32 *pui32TimeToDevUnmap
-		#endif
-		);
+		IMG_UINT32 ui32Flags);
 
 
 /**
@@ -429,11 +423,37 @@ IMG_HANDLE
 BM_HandleToOSMemHandle (BM_HANDLE hBuf);
 
 /**
+ *  @Function   BM_RemapToDev
+ *
+ *  @Description
+ *
+ *  Remaps the device Virtual Mapping.
+ *
+ *  @Input hBuf - buffer handle.
+ *  @Return ref count on success
+ */
+IMG_INT32
+BM_RemapToDev(BM_HANDLE hBuf);
+
+/**
+ *  @Function   BM_UnmapFromDev
+ *
+ *  @Description
+ *
+ *  Removes the device Virtual Mapping.
+ *
+ *  @Input hBuf - buffer handle.
+ *  @Return Ref count on success
+ */
+IMG_INT32
+BM_UnmapFromDev(BM_HANDLE hBuf);
+
+/**
  *  @Function   BM_GetPhysPageAddr
  *
  *  @Description
  *
- *  Retrieve physical address backing dev V address
+ *  Retreive physical address backing dev V address
  *
  *  @Input psMemInfo
  *  @Input sDevVPageAddr
@@ -561,8 +581,8 @@ IMG_UINT32 BM_GetVirtualSize(IMG_HANDLE hBMHandle);
 ******************************************************************************
  @Function	BM_MapPageAtOffset
 
- @Description	utility function check if the specified offset in a BM mapping
-                is a page that needs to be mapped
+ @Description	utility function check if the specificed offset in a BM mapping
+                is a page that needs tp be mapped
 
  @Input     hBMHandle - Handle to BM mapping
 
@@ -574,10 +594,10 @@ IMG_BOOL BM_MapPageAtOffset(IMG_HANDLE hBMHandle, IMG_UINT32 ui32Offset);
 
 /*!
 ******************************************************************************
- @Function	BM_VirtOffsetToPhysical
+ @Function	BM_VirtOffsetToPhyscial
 
  @Description	utility function find of physical offset of a sparse allocation
-                from its virtual offset.
+                from it's virtual offset.
 
  @Input     hBMHandle - Handle to BM mapping
 
@@ -611,6 +631,7 @@ IMG_BOOL BM_VirtOffsetToPhysical(IMG_HANDLE hBMHandle,
 PVRSRV_ERROR BM_XProcWorkaroundSetShareIndex(IMG_UINT32 ui32Index);
 PVRSRV_ERROR BM_XProcWorkaroundUnsetShareIndex(IMG_UINT32 ui32Index);
 PVRSRV_ERROR BM_XProcWorkaroundFindNewBufferAndSetShareIndex(IMG_UINT32 *pui32Index);
+IMG_INT32 BM_XProcGetShareDataRefCount(IMG_UINT32 ui32Index);
 
 #if defined(PVRSRV_REFCOUNT_DEBUG)
 IMG_VOID _BM_XProcIndexAcquireDebug(const IMG_CHAR *pszFile, IMG_INT iLine, IMG_UINT32 ui32Index);
@@ -625,16 +646,29 @@ IMG_VOID _BM_XProcIndexReleaseDebug(const IMG_CHAR *pszFile, IMG_INT iLine, IMG_
 IMG_VOID _BM_XProcIndexAcquire(IMG_UINT32 ui32Index);
 IMG_VOID _BM_XProcIndexRelease(IMG_UINT32 ui32Index);
 
-
 #define BM_XProcIndexAcquire(x) \
 	_BM_XProcIndexAcquire( x)
 #define BM_XProcIndexRelease(x) \
 	_BM_XProcIndexRelease( x)
 #endif
 
+static INLINE IMG_CHAR *
+_BMMappingType (IMG_INT eCpuMemoryOrigin)
+{
+	switch (eCpuMemoryOrigin)
+	{
+	case hm_wrapped: return "hm_wrapped";
+	case hm_wrapped_scatter: return "hm_wrapped_scatter";
+	case hm_wrapped_virtaddr: return "hm_wrapped_virtaddr";
+	case hm_wrapped_scatter_virtaddr: return "hm_wrapped_scatter_virtaddr";
+	case hm_env: return "hm_env";
+	case hm_contiguous: return "hm_contiguous";
+	}
+	return "junk";
+}
 
 #if defined(__cplusplus)
 }
 #endif
 
-#endif
+#endif 

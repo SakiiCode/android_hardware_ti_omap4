@@ -1348,8 +1348,10 @@ static OMAPLFB_ERROR OMAPLFBInitFBVRAM(OMAPLFB_DEVINFO *psDevInfo,
 	psPVRFBInfo->ulHeight = psLINFBInfo->var.yres;
 	psPVRFBInfo->ulByteStride =  psLINFBInfo->fix.line_length;
 	psPVRFBInfo->ulFBSize = FBSize;
+#if defined(CONFIG_DSSCOMP)
 	psPVRFBInfo->bIs2D = OMAPLFB_FALSE;
 	psPVRFBInfo->psPageList = IMG_NULL;
+#endif
 	psPVRFBInfo->ulBufferSize = psPVRFBInfo->ulHeight * psPVRFBInfo->ulByteStride;
 	psPVRFBInfo->ulRoundedBufferSize = RoundUpToMultiple(psPVRFBInfo->ulBufferSize, ulLCM);
 	ui32FBAvailableBuffs = (IMG_UINT32)(psDevInfo->sFBInfo.ulFBSize / psDevInfo->sFBInfo.ulRoundedBufferSize);

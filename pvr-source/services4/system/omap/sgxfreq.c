@@ -56,6 +56,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 #include "sgxfreq.h"
+#include <plat/cpu.h>
 
 static struct sgxfreq_data {
 	int freq_cnt;
